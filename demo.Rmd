@@ -1,0 +1,195 @@
+---
+title: "Untitled"
+author: "Zoey"
+date: "2026-03-24"
+output: html_document
+---
+```{r housekeeping}
+# Package names
+packages <- c("tidyverse","ggsci", "janitor", "readxl", "egor", "sna","dplyr","stats","purrr","igraph","networktools","tidygraph")
+ 
+
+# Install packages not yet installed
+installed_packages <- packages %in% rownames(installed.packages())
+if (any(installed_packages == FALSE)) {
+  install.packages(packages[!installed_packages])
+}
+
+# Packages loading
+invisible(lapply(packages, library, character.only = TRUE))
+```
+
+## R Markdown
+
+```{r }
+library(egoLangBetweenness)
+library(igraph)
+
+```
+
+## Including Plots
+
+You can also embed plots, for example:
+
+```{r pressure, echo=FALSE}
+# Set folder path here:
+path <- 'C:/Users/Zoey/OneDrive - UC San Diego/Desktop/dataset project'
+
+```
+
+### network questionnaire preparation
+```{r}
+
+# ead all columns as character to avoid type-mismatch errors when combining files
+read_csv_char <- function(path) {
+  read.csv(path, stringsAsFactors = FALSE, colClasses = "character")
+}
+
+alter_dir <- file.path(path, "tcc_pns", "tcc_pns_alter")
+ego_dir   <- file.path(path, "tcc_pns", "tcc_pns_ego")
+tie_dir   <- file.path(path, "tcc_pns", "tcc_pns_edgelist_tie")
+
+alterData <- list.files(alter_dir, full.names = TRUE, pattern = "_attributeList_People.csv") |> 
+  lapply(read_csv_char) |> 
+  dplyr::bind_rows()
+
+egoID <- list.files(ego_dir, full.names = TRUE, pattern = "_ego.csv") |> 
+  lapply(read_csv_char) |> 
+  dplyr::bind_rows() 
+
+
+edgelist <- list.files(tie_dir, full.names = TRUE, pattern = "_edgeList_tie.csv") |> 
+  lapply(read_csv_char) |> 
+  dplyr::bind_rows() 
+
+
+exclusion <- c("melrio91", "iveote39", "daimoy82", "gredel26")
+
+egoID_clean <- egoID|>
+  dplyr::mutate(
+    participant = tolower(participant),
+    participant = dplyr::recode(
+      participant,
+      "cartrm72" = "cartre72",
+      "dylber39" = "iveote39",
+      "ellpac82" = "ellpac84",
+      "sofgon22" = "sofgon23",
+      "lernie04" = "lernie 04",
+      "gersua38"   = "gersua",
+      "sustir80" = "susitr80",
+      "xiawuw10" = "xiawu10"
+    )
+  ) |>
+  dplyr::filter(!participant %in% exclusion)
+
+
+alterData_linked <- alterData |> 
+  dplyr::semi_join(
+    egoID_clean |>  dplyr::select(networkCanvasEgoUUID, networkCanvasCaseID, participant),
+    by = "networkCanvasEgoUUID"
+  )|>  
+  dplyr::select(-c("drag_screenSpaceX", "drag_screenSpaceY"))
+
+edgelist_clean <- edgelist |> 
+  dplyr::semi_join(
+    egoID_clean |>  dplyr::select(networkCanvasEgoUUID),
+    by = "networkCanvasEgoUUID"
+  )
+
+
+# the cleaned data: egoID_clean, alterData_linked,edgelist_clean
+
+```
+
+
+```{r data alter language use, echo=TRUE, message=FALSE, warning=FALSE}
+classifyLanguageUseCategory <- function(df,
+                                       prefix = "^ego_alter_language_",
+                                       spanish_col = "ego_alter_language_Spanish",
+                                       english_col = "ego_alter_language_English",
+                                       none_label = "None/Unknown") {
+
+  # 1) Find all language columns
+  allLanguages <- grep(prefix, names(df), value = TRUE)
+
+  # 2) Safety checks
+  needed <- c(spanish_col, english_col)
+  missing_needed <- setdiff(needed, names(df))
+  if (length(missing_needed) > 0) {
+    stop("Missing required columns: ", paste(missing_needed, collapse = ", "))
+  }
+
+  # 3) Coerce language columns to logical robustly
+  #    Handles TRUE/FALSE, "true"/"false", 1/0, NA
+  to_logical <- function(x) {
+    if (is.logical(x)) return(x)
+    if (is.numeric(x)) return(x == 1)
+    if (is.character(x)) return(tolower(x) %in% c("true", "t", "1", "yes", "y"))
+    as.logical(x)
+  }
+
+  lang_df <- df[, allLanguages, drop = FALSE]
+  lang_df[] <- lapply(lang_df, to_logical)
+
+  # Treat NA as FALSE for categorization
+  lang_df[is.na(lang_df)] <- FALSE
+
+  # 4) Define "other" columns: everything except Spanish/English
+  otherLanguages <- setdiff(allLanguages, c(spanish_col, english_col))
+
+  # 5) Row-wise flags (vectorized)
+  speaksSpanish <- lang_df[[spanish_col]]
+  speaksEnglish <- lang_df[[english_col]]
+  speaksOther   <- if (length(otherLanguages) == 0) {
+    rep(FALSE, nrow(df))
+  } else {
+    rowSums(lang_df[, otherLanguages, drop = FALSE]) > 0
+  }
+
+  # 6) Category
+  category <- dplyr::case_when(
+    speaksSpanish & speaksEnglish & speaksOther ~ "Spanish/English/Other",
+    speaksSpanish & speaksEnglish               ~ "Spanish/English",
+    speaksSpanish & speaksOther                 ~ "Spanish/Other",
+    speaksEnglish & speaksOther                 ~ "English/Other",
+    speaksSpanish                               ~ "Spanish",
+    speaksEnglish                               ~ "English",
+    speaksOther                                 ~ "Other",
+    TRUE                                        ~ none_label
+  )
+
+  return(category)
+}
+
+alterData_linked$languageUsedCategory <- classifyLanguageUseCategory(alterData_linked)
+janitor::tabyl(alterData_linked$languageUsedCategory)
+
+```
+
+```{r}
+
+
+alterData_linked <- alterData_linked %>%
+  left_join(
+    egoID_clean %>%
+      select(networkCanvasEgoUUID, participant),
+    by = "networkCanvasEgoUUID"
+  )
+
+```
+
+```{r}
+library(egoLangBetweenness)
+
+betweenness_df <- ego_language_betweenness_dataset(
+  ego_df = egoID_clean,
+  alter_df = alterData_linked,
+  edge_df = edgelist_clean
+)
+
+
+
+```
+
+
+

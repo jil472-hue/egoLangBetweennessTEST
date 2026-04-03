@@ -14,6 +14,7 @@ ego_language_betweenness_dataset(
   target_col = "networkCanvasTargetUUID",
   ego_name = "ego",
   community_attr = "languageUsedCategory",
+  unknown_community = "Unknown",
   participant_col = "participant"
 )
 }
@@ -37,11 +38,16 @@ ego_language_betweenness_dataset(
 \item{community_attr}{Vertex attribute indicating alter language community.
 Default is "languageUsedCategory".}
 
+\item{unknown_community}{Label used for missing alter language community.
+Default is "Unknown".}
+
 \item{participant_col}{Optional column in \code{ego_df} to merge into output.
 Default is "participant".}
 }
 \value{
-A data frame with one row per ego and a language betweenness score.
+A data frame with one row per ego containing the raw language
+betweenness score, the number of valid alter pairs, and the normalized
+betweenness score.
 }
 \description{
 This function builds an egor object from cleaned ego, alter, and edge
@@ -53,4 +59,9 @@ ego language betweenness for every ego using
 Betweenness is computed as the extent to which the ego lies on shortest
 paths between alters belonging to different language communities,
 considering only alter pairs with non-missing community assignments.
+
+In addition to the raw betweenness score, the function also returns the
+number of valid alter pairs used in the calculation and a normalized
+betweenness score, defined as raw betweenness divided by the number of
+valid cross-community alter pairs.
 }

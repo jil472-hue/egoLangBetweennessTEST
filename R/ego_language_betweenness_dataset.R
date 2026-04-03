@@ -9,6 +9,11 @@
 #' paths between alters belonging to different language communities,
 #' considering only alter pairs with non-missing community assignments.
 #'
+#' In addition to the raw betweenness score, the function also returns the
+#' number of valid alter pairs used in the calculation and a normalized
+#' betweenness score, defined as raw betweenness divided by the number of
+#' valid cross-community alter pairs.
+#'
 #' @param ego_df A data frame containing ego-level data.
 #' @param alter_df A data frame containing alter-level data.
 #' @param edge_df A data frame containing edge-level data.
@@ -19,10 +24,14 @@
 #' @param ego_name Name of the ego node in the igraph object. Default is "ego".
 #' @param community_attr Vertex attribute indicating alter language community.
 #'   Default is "languageUsedCategory".
+#' @param unknown_community Label used for missing alter language community.
+#'   Default is "Unknown".
 #' @param participant_col Optional column in `ego_df` to merge into output.
 #'   Default is "participant".
 #'
-#' @return A data frame with one row per ego and a language betweenness score.
+#' @return A data frame with one row per ego containing the raw language
+#'   betweenness score, the number of valid alter pairs, and the normalized
+#'   betweenness score.
 #' @export
 ego_language_betweenness_dataset <- function(
     ego_df,
@@ -34,6 +43,7 @@ ego_language_betweenness_dataset <- function(
     target_col = "networkCanvasTargetUUID",
     ego_name = "ego",
     community_attr = "languageUsedCategory",
+    unknown_community = "Unknown",
     participant_col = "participant"
 ) {
   required_ego <- ego_id_col
@@ -77,12 +87,60 @@ ego_language_betweenness_dataset <- function(
     score <- ego_language_betweenness_single(
       gr = gr,
       ego_name = ego_name,
-      community_attr = community_attr
+      community_attr = community_attr,
+      unknown_community = unknown_community
     )
+
+    vertex_names <- igraph::V(gr)$name
+    ego_index <- which(vertex_names == ego_name)
+
+    if (length(ego_index) != 1) {
+      stop("Each graph must contain exactly one ego node named `", ego_name, "`.")
+    }
+
+    community <- igraph::vertex_attr(gr, community_attr)
+
+    if (is.null(community)) {
+      community <- rep(unknown_community, igraph::vcount(gr))
+    } else {
+      community <- as.character(community)
+      community[is.na(community)] <- unknown_community
+    }
+
+    alter_ids <- setdiff(seq_len(igraph::vcount(gr)), ego_index)
+
+    n_valid_pairs <- 0
+
+    if (length(alter_ids) >= 2) {
+      node_pairs <- utils::combn(alter_ids, 2)
+
+      for (pair_idx in seq_len(ncol(node_pairs))) {
+        start_node <- node_pairs[1, pair_idx]
+        end_node   <- node_pairs[2, pair_idx]
+
+        start_community <- community[start_node]
+        end_community   <- community[end_node]
+
+        if (is.na(start_community) ||
+            is.na(end_community) ||
+            start_community == unknown_community ||
+            end_community == unknown_community) {
+          next
+        }
+
+        if (!isTRUE(start_community == end_community)) {
+          n_valid_pairs <- n_valid_pairs + 1
+        }
+      }
+    }
+
+    score_norm <- if (n_valid_pairs > 0) score / n_valid_pairs else NA_real_
 
     data.frame(
       ego_id = gr$.egoID,
       language_betweenness = score,
+      n_valid_pairs = n_valid_pairs,
+      language_betweenness_norm = score_norm,
       stringsAsFactors = FALSE
     )
   })

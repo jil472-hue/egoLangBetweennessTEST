@@ -8,7 +8,6 @@ ego_language_betweenness_single(
   gr,
   ego_name = "ego",
   community_attr = "languageUsedCategory",
-  ego_community = "Bilingual",
   unknown_community = "Unknown",
   mode = "all"
 )
@@ -18,11 +17,9 @@ ego_language_betweenness_single(
 
 \item{ego_name}{Name of the ego node. Default is "ego".}
 
-\item{community_attr}{Vertex attribute indicating language community.}
+\item{community_attr}{Vertex attribute indicating alter language community.}
 
-\item{ego_community}{Label assigned to ego if community is missing.}
-
-\item{unknown_community}{Label assigned if community attribute does not exist.}
+\item{unknown_community}{Label assigned when alter community is missing.}
 
 \item{mode}{Mode passed to igraph::all_shortest_paths().}
 }

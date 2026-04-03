@@ -34,7 +34,7 @@ ego_language_betweenness_dataset(
 
 \item{ego_name}{Name of the ego node in the igraph object. Default is "ego".}
 
-\item{community_attr}{Vertex attribute indicating language community.
+\item{community_attr}{Vertex attribute indicating alter language community.
 Default is "languageUsedCategory".}
 
 \item{participant_col}{Optional column in \code{ego_df} to merge into output.
@@ -48,4 +48,9 @@ This function builds an egor object from cleaned ego, alter, and edge
 tables, converts each ego network to an igraph object, and computes
 ego language betweenness for every ego using
 \code{ego_language_betweenness_single()}.
+}
+\details{
+Betweenness is computed as the extent to which the ego lies on shortest
+paths between alters belonging to different language communities,
+considering only alter pairs with non-missing community assignments.
 }

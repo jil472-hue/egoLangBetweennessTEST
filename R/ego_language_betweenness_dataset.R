@@ -5,6 +5,10 @@
 #' ego language betweenness for every ego using
 #' `ego_language_betweenness_single()`.
 #'
+#' Betweenness is computed as the extent to which the ego lies on shortest
+#' paths between alters belonging to different language communities,
+#' considering only alter pairs with non-missing community assignments.
+#'
 #' @param ego_df A data frame containing ego-level data.
 #' @param alter_df A data frame containing alter-level data.
 #' @param edge_df A data frame containing edge-level data.
@@ -13,7 +17,7 @@
 #' @param source_col Column name in `edge_df` containing source alter IDs.
 #' @param target_col Column name in `edge_df` containing target alter IDs.
 #' @param ego_name Name of the ego node in the igraph object. Default is "ego".
-#' @param community_attr Vertex attribute indicating language community.
+#' @param community_attr Vertex attribute indicating alter language community.
 #'   Default is "languageUsedCategory".
 #' @param participant_col Optional column in `ego_df` to merge into output.
 #'   Default is "participant".
@@ -76,18 +80,16 @@ ego_language_betweenness_dataset <- function(
       community_attr = community_attr
     )
 
-    out <- data.frame(
+    data.frame(
       ego_id = gr$.egoID,
       language_betweenness = score,
       stringsAsFactors = FALSE
     )
-
-    out
   })
 
   results_df <- do.call(rbind, results)
 
-  if (participant_col %in% names(ego_df)) {
+  if (!is.null(participant_col) && participant_col %in% names(ego_df)) {
     participant_df <- unique(ego_df[, c(ego_id_col, participant_col), drop = FALSE])
     names(participant_df) <- c("ego_id", "participant")
 

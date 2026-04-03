@@ -9,11 +9,6 @@
 #' paths between alters belonging to different language communities,
 #' considering only alter pairs with non-missing community assignments.
 #'
-#' In addition to the raw betweenness score, the function also returns the
-#' number of valid alter pairs used in the calculation and a normalized
-#' betweenness score, defined as raw betweenness divided by the number of
-#' valid cross-community alter pairs.
-#'
 #' @param ego_df A data frame containing ego-level data.
 #' @param alter_df A data frame containing alter-level data.
 #' @param edge_df A data frame containing edge-level data.
@@ -30,8 +25,7 @@
 #'   Default is "participant".
 #'
 #' @return A data frame with one row per ego containing the raw language
-#'   betweenness score, the number of valid alter pairs, and the normalized
-#'   betweenness score.
+#'   betweenness score and the number of valid alter pairs.
 #' @export
 ego_language_betweenness_dataset <- function(
     ego_df,
@@ -94,10 +88,6 @@ ego_language_betweenness_dataset <- function(
     vertex_names <- igraph::V(gr)$name
     ego_index <- which(vertex_names == ego_name)
 
-    if (length(ego_index) != 1) {
-      stop("Each graph must contain exactly one ego node named `", ego_name, "`.")
-    }
-
     community <- igraph::vertex_attr(gr, community_attr)
 
     if (is.null(community)) {
@@ -134,13 +124,10 @@ ego_language_betweenness_dataset <- function(
       }
     }
 
-    score_norm <- if (n_valid_pairs > 0) score / n_valid_pairs else NA_real_
-
     data.frame(
       ego_id = gr$.egoID,
       language_betweenness = score,
       n_valid_pairs = n_valid_pairs,
-      language_betweenness_norm = score_norm,
       stringsAsFactors = FALSE
     )
   })

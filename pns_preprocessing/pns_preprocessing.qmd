@@ -1,0 +1,855 @@
+---
+title: "PNS Data Preprocessing"
+author: "Monica Shen"
+date: "`r Sys.Date()`"
+format:
+  html:
+    theme: cosmo
+    toc: true
+    toc-depth: 3
+    toc-title: "Contents"
+    code-overflow: wrap
+    embed-resources: true
+editor: visual
+execute:
+  echo: true
+  warning: false
+  message: false
+---
+
+# Introduction
+
+Personal network surveys (PNS) extend traditional language background questionnaires (LHQs) by shifting the unit of analysis from the **individual** to the **relationship**.
+
+In a standard LHQ, each participant contributes a single row summarizing their language experience. In contrast, a PNS dataset captures:
+
+-   the participant (**ego**)
+
+-   the people they interact with (**alters**)
+
+-   the relationships among those alters (**ties**)
+
+This tutorial proceeds in four steps:
+
+1.  **Read the three Network Canvas Export files**
+2.  **Construct analysis-ready datasets**
+3.  **Aggregate alter-level data into ego-level measures**
+4.  **Visualize ego networks**
+
+# Understanding the Data Structure
+
+### Three Levels
+
+1.  [Ego-level Data](#ego) (`demo_egoID.csv)`
+2.  [Alter-level Data](#alter) (`demo_alterData.csv`)
+3.  [Edge List](#ties) (`demo_edgeList.csv)`
+
+### Ego-level Data {#ego}
+
+| Variable | Data Type | Description |
+|-----------------------|-------------------|------------------------------|
+| `networkCanvasEgoUUID` | Character (UUID) | Unique identifier for ego (participant) |
+| `networkCanvasCaseID` | Character (UUID) | A more readable identifier for ego |
+| `networkCanvasSessionID` | Character (UUID) | Unique identifier for the survey session |
+| `networkCanvasProtocolName` | Character | Name of protocol |
+| `sessionStart` | Date-time (POSIXct) | Timestamp indicating session start |
+| `sessionFinish` | Date-time (POSIXct) | Timestamp indicating session finish |
+| `participant` | Character | Unique participant identifier |
+
+**Notes**:
+
+-   `networkCanvasCaseID` and `participant` columns are identical
+-   Use `networkCanvasEgoUUID` to link variables across datasets
+
+### Alter-level Data {#alter}
+
+#### Network Canvas Variables
+
+| Variable | Data Type | Description |
+|-------------------|-------------------|----------------------------------|
+| `participant` | Character | Unique participant identifier |
+| `nodeID` | Numeric | Numeric identifier (1-15) for each alter in a network |
+| `networkCanvasEgoUUID` | Character (UUID) | Unique identifier for ego (participant) |
+| `networkCanvasCaseID` | Character (UUID) | A more readable identifier for ego |
+| `networkCanvasUUID` | Character (UUID) | Unique identifier for each entity (alter) |
+| `drag_x` | Numeric | x position of node on network plot (normalized 0-1) |
+| `drag_y` | Numeric | y position of node on network plot (normalized 0-1) |
+
+**Notes**:
+
+-   Use `networkCanvasEgoUUID` to link variables across datasets
+-   `networkCanvasCaseID` and `participant` columns are identical
+-   `nodeID` is unique within each participant but not across participants
+-   `drag_x` and `drag_y` reflect spatial positioning in the network plot and do not represent metric distances
+
+#### Alter Attributes
+
+| Variable | Data Type | Values |
+|-------------------|--------------------|---------------------------------|
+| `alter_age` | Character | `0_9`,`10_19`,`20_29`,`30_39`,`40_49`,`50_59`,`60_69`,`70_99`,`NA` |
+| `alter_city` | Character | City (e.g., `San_Juan`, `Carolina`) or `NA` |
+| `alter_closeness` | Ordinal | 1 (not close) to 5 (extremely close) |
+| `alter_context` | Character | `family`,`school`,`social`,`work`,`NA` |
+| `alter_frequency` | Ordinal | 1 (once a year) to 4 (once a day) |
+| `alter_gender` | Character | `female`,`male`,`other`,`NA` |
+
+**Notes**:
+
+-   `alter_city` the city or town where the alter currently resides; if unknown, a state/province or country may be provided instead
+
+##### Alter Language
+
+**Variable Format:** `alter_language_{language}`\
+**Languages:** `Spanish`, `English`, `French`, `German`, `Italian`, `Portuguese`, `Arabic`, `Catalan`, `Mandarin`, `Other` **Total Variables:** 10
+
+| Attribute       | Details                                           |
+|-----------------|---------------------------------------------------|
+| **Data Type**   | logical (TRUE/FALSE)                              |
+| **Missing**     | `NA` if language does not apply                   |
+| **Description** | Indicator of whether the alter uses each language |
+
+#### Ego-Alter Attributes
+
+| Variable | Data Type | Values | Description |
+|------------------|------------------|------------------|-------------------|
+| `ego_alter_language_{language}` | logical | TRUE/FALSE | Indicator of whether the ego uses each language with each alter |
+| `alter_mode_{mode}` | logical | TRUE/FALSE | Indicator of whether the ego and alter interact in each mode |
+| `ego_alter_cs_frequency` | Ordinal | 1 (never) to 4 (always) | Frequency of CS between ego and alter |
+| `languageUsedCategory` | Character | `Spanish`, `English`, `Spanish-English`, `Other` | Language(s) ego uses when interacting with each alter |
+
+**Notes**:
+
+-   `ego_alter_language_{language}` columns include: `Spanish`, `English`, `French`, `German`, `Italian`, `Portuguese`, `Arabic`, `Catalan`, `Mandarin`, `Other`
+-   `alter_mode_{mode}` columns include: `in_person`,`zoom`,`social_media`,`phone`,`email`
+
+#### Edge List {#ties}
+
+| Variable | Data Type | Description |
+|-------------------|-------------------|----------------------------------|
+| `edgeID` | Numeric | Numeric identifier (1-38) for each **tie** in a network |
+| `from` | Numeric | Node ID (1-15) linking **source** node to a target node |
+| `to` | Numeric | Node ID (1-15) linking **target** node to a source node |
+| `networkCanvasUUID` | Character (UUID) | Unique identifier for each entity |
+| `networkCanvasSourceUUID` | Character (UUID) | Unique identifier for source alter |
+| `networkCanvasTargetUUID` | Character (UUID) | Unique identifier for target alter |
+
+**Notes**:
+
+-   Use `networkCanvasEgoUUID` to link variables across `ego_df`, `alter_df`, and `edge_df`
+-   `from` and `to` can be linked to specific alters in a network using `nodeID` in the alter-level dataset
+-   `networkCanvasSourceUUID` and `networkCanvasTargetUUID` can be linked to specific alters using `networkCanvasUUID` in the alter-level dataset
+
+## References
+
+**Network Canvas Documentation:** https://documentation.networkcanvas.com/
+
+**Ego-network Analysis in R:** - `egor` package: https://cran.r-project.org/package=egor - `igraph` package: https://igraph.org/r/ ------------------------------------------------------------------------ \## 0.Setup
+
+```{r setup}
+packages <- c("dplyr", "tidyr", "readr", "igraph", "egor",
+              "janitor", "ggplot2", "scales", "purrr")
+
+installed_packages <- packages %in% rownames(installed.packages())
+if (any(!installed_packages)) {
+  install.packages(packages[!installed_packages])
+}
+
+invisible(lapply(packages, library, character.only = TRUE))
+
+lang_colours <- c(
+  "Spanish"              = "#D73027",
+  "English"              = "#2C5F8A",
+  "Spanish-English"      = "#A8C8E8",
+  "Other"                = "gray"
+)
+```
+
+# Demo Script
+
+## 1. Load Raw Data
+
+```{r load_data, results='hide'}
+data_dir <- "./pns_preprocessing"
+
+data_ego <- readr::read_csv(
+  file.path(data_dir, "demo_egoID.csv"),
+  show_col_types = FALSE
+)
+
+data_alter <- readr::read_csv(
+  file.path(data_dir, "demo_alterData.csv"),
+  show_col_types = FALSE
+)
+
+data_edgelist <- readr::read_csv(
+  file.path(data_dir, "demo_edgeList.csv"),
+  show_col_types = FALSE
+)
+```
+
+```{r link_datasets, results='hide'}
+alterData_linked <- data_alter |>
+  dplyr::semi_join(
+    data_ego |> dplyr::select(networkCanvasEgoUUID),
+    by = "networkCanvasEgoUUID"
+  )
+
+edgelist_linked <- data_edgelist |>
+  dplyr::semi_join(
+    data_ego |> dplyr::select(networkCanvasEgoUUID),
+    by = "networkCanvasEgoUUID"
+  )
+```
+
+## 2. Alter-Level Preprocessing
+
+### 2.1 Language Categorization
+
+#### language-agnostic vs. language-specific
+
+The two classification functions below are **language-agnostic**: they detect language columns via a shared prefix (`ego_alter_language_` or `alter_language_`) and assign categories based solely on the two focal language flags supplied as arguments. Any non-focal language is treated as `"Other"`. This means the same function works for any bilingual sample by changing `spanish_col` and `english_col`.
+
+#### Ego-alter language use
+
+*(What language(s) does the ego speak with this alter?)*
+
+`languageUsedCategory` takes four values based solely on the two focal language flags, ignoring all other language columns:
+
+| Spanish | English | Category          |
+|---------|---------|-------------------|
+| TRUE    | FALSE   | `Spanish`         |
+| FALSE   | TRUE    | `English`         |
+| TRUE    | TRUE    | `Spanish-English` |
+| FALSE   | FALSE   | `Other`           |
+
+```{r classify_ego_alter_lang}
+classifyLanguageUseCategory <- function(df,
+                                        prefix      = "ego_alter_language_",
+                                        spanish_col = "ego_alter_language_Spanish",
+                                        english_col = "ego_alter_language_English",
+                                        none_label  = "Other") {
+
+  # 1) Safety checks
+  needed         <- c(spanish_col, english_col)
+  missing_needed <- setdiff(needed, names(df))
+  if (length(missing_needed) > 0) {
+    stop("Missing required columns: ", paste(missing_needed, collapse = ", "))
+  }
+
+  # 2) Coerce focal language columns to logical robustly
+  #    Handles TRUE/FALSE, "true"/"false", 1/0, NA
+  to_logical <- function(x) {
+    if (is.logical(x))   return(x)
+    if (is.numeric(x))   return(x == 1)
+    if (is.character(x)) return(tolower(x) %in% c("true", "t", "1", "yes", "y"))
+    as.logical(x)
+  }
+
+  speaksSpanish <- to_logical(df[[spanish_col]])
+  speaksEnglish <- to_logical(df[[english_col]])
+
+  # Treat NA as FALSE
+  speaksSpanish[is.na(speaksSpanish)] <- FALSE
+  speaksEnglish[is.na(speaksEnglish)] <- FALSE
+
+  # 3) Four-level category based on focal language flags only
+  category <- dplyr::case_when(
+    speaksSpanish &  speaksEnglish ~ "Spanish-English",
+    speaksSpanish & !speaksEnglish ~ "Spanish",
+   !speaksSpanish &  speaksEnglish ~ "English",
+    TRUE                           ~ none_label   # Spanish FALSE, English FALSE
+  )
+
+  return(category)
+}
+
+alterData_linked$languageUsedCategory <-
+  classifyLanguageUseCategory(alterData_linked)
+
+janitor::tabyl(alterData_linked$languageUsedCategory)
+```
+
+#### Alter language repertoire
+
+*(What language(s) does the alter know overall?)*
+
+`languageKnownCategory` follows the same four-level logic, applied to the alter's own repertoire (`alter_language_*` columns) rather than the ego-alter interaction columns.
+
+```{r classify_alter_lang_known}
+classifyLanguageKnownCategory <- function(df,
+                                          prefix      = "alter_language_",
+                                          spanish_col = "alter_language_Spanish",
+                                          english_col = "alter_language_English",
+                                          none_label  = "Other") {
+
+  needed         <- c(spanish_col, english_col)
+  missing_needed <- setdiff(needed, names(df))
+  if (length(missing_needed) > 0) {
+    stop("Missing required columns: ", paste(missing_needed, collapse = ", "))
+  }
+
+  to_logical <- function(x) {
+    if (is.logical(x))   return(x)
+    if (is.numeric(x))   return(x == 1)
+    if (is.character(x)) return(tolower(x) %in% c("true", "t", "1", "yes", "y"))
+    as.logical(x)
+  }
+
+  speaksSpanish <- to_logical(df[[spanish_col]])
+  speaksEnglish <- to_logical(df[[english_col]])
+
+  speaksSpanish[is.na(speaksSpanish)] <- FALSE
+  speaksEnglish[is.na(speaksEnglish)] <- FALSE
+
+  category <- dplyr::case_when(
+    speaksSpanish &  speaksEnglish ~ "Spanish-English",
+    speaksSpanish & !speaksEnglish ~ "Spanish",
+   !speaksSpanish &  speaksEnglish ~ "English",
+    TRUE                           ~ none_label
+  )
+
+  return(category)
+}
+
+alterData_linked$languageKnownCategory <-
+  classifyLanguageKnownCategory(alterData_linked)
+
+janitor::tabyl(alterData_linked$languageKnownCategory)
+```
+
+### 2.2 ordinal columns to numeric
+
+```{r ordinal_to_numeric}
+alterData_linked <- alterData_linked |>
+  dplyr::mutate(
+    alter_closeness        = as.numeric(alter_closeness),
+    alter_frequency        = as.numeric(alter_frequency),
+    ego_alter_cs_frequency = as.numeric(ego_alter_cs_frequency)
+  )
+```
+
+## 3. Tidy Alter-Level Dataset
+
+The tidy alter dataset retains one row per ego-alter dyad and is the basis for all within-ego analyses. It is also the source for the `tidy_alter` argument in the network plot functions below.
+
+```{r tidy_alter}
+tidy_alter <- alterData_linked |>
+  dplyr::select(
+    # identifiers
+    participant, networkCanvasEgoUUID, nodeID, networkCanvasUUID,
+    # alter-level 
+    alter_age, alter_gender, alter_city,
+    # ego-alter-level
+    alter_context, alter_closeness, alter_frequency,
+    # derived language variables
+    languageUsedCategory, languageKnownCategory,
+    # outcome variable
+    ego_alter_cs_frequency
+  )
+
+dplyr::glimpse(tidy_alter)
+```
+
+## 4. Ego-Level Wide Dataset
+
+Start with `data_ego` (one row per participant). LHQ scores and proficiency task results can be joined on `participant`.
+
+```{r ego_wide}
+ego_wide <- data_ego |>
+  dplyr::select(
+    networkCanvasEgoUUID,   # links to alter / edgelist data
+    participant,             # links to LHQ and objective task data
+    sessionStart,
+    sessionFinish
+  )
+
+  # If LHQ self-report data are available:
+  # |> dplyr::left_join(lhq_df, by = "participant")
+
+  # If objective task data are available:
+  # |> dplyr::left_join(objective_df, by = "participant")
+
+
+dplyr::glimpse(ego_wide)
+```
+
+## 5. Build egor Object
+
+The `egor` package provides a unified data structure for egocentric network data that keeps ego, alter, and alter-alter levels linked. This mirrors the approach in the Vacca et al. workshop (Ch. 7) and supports both `purrr`-based split-apply-combine operations and egor's own analysis functions such as `composition()` and `clustered_graphs()`.
+
+`threefiles_to_egor()` takes the three preprocessed data frames and constructs a single egor object in which each row represents one ego, with alter data and alter-alter ties stored as nested list columns (`.alts` and `.aaties`).
+
+**Key arguments:**
+
+-   **`egos`** — ego-level data frame (`data_ego`); one row per participant
+-   **`alters.df`** — alter-level data frame; one row per alter across all egos
+-   **`edges`** — alter-alter edgelist; one row per tie between two alters
+-   **`ID.vars`** — maps column names to required identifiers:
+    -   **`ego`**: unique ID for each ego (`networkCanvasEgoUUID`)
+    -   **`alter`**: unique ID for each alter (`networkCanvasUUID`)
+    -   **`source`** / **`target`**: endpoints of each alter-alter tie
+
+The result is a structured `egor` object that supports social network analysis, visualization, and structural/compositional measure computation.
+
+```{r build_egor}
+# languageKnownCategory must be a factor with explicit levels so that
+# clustered_graphs() can group alters correctly even when some levels are
+# absent for a given ego. Without this, egor produces degenerate 0-vertex
+# graphs that crash vis_clustered_graphs() with "layout must be a matrix".
+alter_for_egor <- alterData_linked |>
+  dplyr::mutate(
+    languageKnownCategory = factor(languageKnownCategory,
+                                   levels = names(lang_colours))
+  )
+
+# Use the UUID-based ID columns — this matches real Network Canvas exports,
+# where networkCanvasUUID identifies each alter and networkCanvasSourceUUID /
+# networkCanvasTargetUUID identify the endpoints of each alter-alter tie.
+# These must match exactly (including zero-padding) or egor will error with
+# "alter referenced in alter-alter data is not listed in alter data".
+egor_obj <- egor::threefiles_to_egor(
+  egos      = data_ego,
+  alters.df = alter_for_egor,
+  edges     = edgelist_linked,
+  ID.vars   = list(
+    ego    = "networkCanvasEgoUUID",
+    alter  = "networkCanvasUUID",
+    source = "networkCanvasSourceUUID",
+    target = "networkCanvasTargetUUID"
+  )
+)
+```
+
+## 6. Compositional Measures
+
+Compositional measures convert alter-level data into ego-level summaries. §6.1 uses `egor::composition()` — the idiomatic egor one-liner for proportional language composition. §6.2-6.5 use the four-step `group_by` → `summarise` → `pivot_wider` → `left_join` pipeline from the tutorial, which makes each step explicit and is easier to adapt to new grouping variables.
+
+### 6.1 Alter language composition via egor
+
+*What proportion of each ego's alters belong to each language category?*
+
+`egor::composition()` computes proportional frequencies of a categorical alter attribute for every ego in one call, returning a wide ego-level tibble. This is equivalent to manually running `group_by(networkCanvasEgoUUID, languageKnownCategory) |> summarise(...) |> pivot_wider(...)` but more concise.
+
+```{r comp_lang_egor}
+lang_comp_ego <- egor::composition(egor_obj, alt.attr = "languageKnownCategory")
+lang_comp_ego
+
+ego_wide <- ego_wide |>
+  dplyr::left_join(
+    lang_comp_ego |> dplyr::rename(networkCanvasEgoUUID = .egoID),
+    by = "networkCanvasEgoUUID"
+  )
+```
+
+### 6.2 CS frequency by interaction context
+
+*Research question: does the ego code-switch more in family contexts than in school contexts?*
+
+```{r comp_context}
+# Step 1 — mean CS frequency per ego x context
+comp_context_long <- tidy_alter |>
+  dplyr::group_by(networkCanvasEgoUUID, alter_context) |>
+  dplyr::summarise(
+    mean_cs  = mean(ego_alter_cs_frequency, na.rm = TRUE),
+    n_alters = dplyr::n(),
+    .groups  = "drop"
+  )
+
+# Step 2 — pivot wide, one column per context
+comp_context_wide <- comp_context_long |>
+  tidyr::pivot_wider(
+    id_cols      = networkCanvasEgoUUID,
+    names_from   = alter_context,
+    values_from  = mean_cs,
+    names_prefix = "cs_context_"
+  )
+
+# Step 3 — join back to ego_wide
+ego_wide <- ego_wide |>
+  dplyr::left_join(comp_context_wide, by = "networkCanvasEgoUUID")
+
+comp_context_wide
+```
+
+### 6.3 CS frequency by alter language group
+
+*Research question: does the ego code-switch more with bilingual alters than with monolingual alters?*
+
+```{r comp_lang_group}
+comp_lang_long <- tidy_alter |>
+  dplyr::group_by(networkCanvasEgoUUID, languageUsedCategory) |>
+  dplyr::summarise(
+    mean_cs  = mean(ego_alter_cs_frequency, na.rm = TRUE),
+    n_alters = dplyr::n(),
+    .groups  = "drop"
+  )
+
+comp_lang_wide <- comp_lang_long |>
+  tidyr::pivot_wider(
+    id_cols      = networkCanvasEgoUUID,
+    names_from   = languageUsedCategory,
+    values_from  = mean_cs,
+    names_prefix = "cs_lang_"
+  )
+
+ego_wide <- ego_wide |>
+  dplyr::left_join(comp_lang_wide, by = "networkCanvasEgoUUID")
+
+comp_lang_wide
+```
+
+### 6.4 CS frequency by emotional closeness tier
+
+*Research question: is CS frequency higher with close ties than with peripheral ties?*
+
+```{r comp_closeness}
+comp_close_long <- tidy_alter |>
+  dplyr::mutate(
+    closeness_tier = dplyr::case_when(
+      alter_closeness <= 2 ~ "low",
+      alter_closeness <= 3 ~ "mid",
+      alter_closeness >= 4 ~ "high"
+    )
+  ) |>
+  dplyr::group_by(networkCanvasEgoUUID, closeness_tier) |>
+  dplyr::summarise(
+    mean_cs  = mean(ego_alter_cs_frequency, na.rm = TRUE),
+    n_alters = dplyr::n(),
+    .groups  = "drop"
+  )
+
+comp_close_wide <- comp_close_long |>
+  tidyr::pivot_wider(
+    id_cols      = networkCanvasEgoUUID,
+    names_from   = closeness_tier,
+    values_from  = mean_cs,
+    names_prefix = "cs_close_"
+  )
+
+ego_wide <- ego_wide |>
+  dplyr::left_join(comp_close_wide, by = "networkCanvasEgoUUID")
+
+comp_close_wide
+```
+
+### 6.5 Heritage language use by alter age group
+
+*Research question: does the ego use more Spanish with older alters (potential heritage-language transmission partners)?*
+
+```{r comp_age}
+comp_age_long <- tidy_alter |>
+  dplyr::mutate(
+    uses_spanish = languageUsedCategory %in% c("Spanish", "Spanish-English")
+  ) |>
+  dplyr::group_by(networkCanvasEgoUUID, alter_age) |>
+  dplyr::summarise(
+    prop_spanish = mean(uses_spanish, na.rm = TRUE),
+    n_alters     = dplyr::n(),
+    .groups      = "drop"
+  )
+
+comp_age_wide <- comp_age_long |>
+  tidyr::pivot_wider(
+    id_cols      = networkCanvasEgoUUID,
+    names_from   = alter_age,
+    values_from  = prop_spanish,
+    names_prefix = "spanish_age_"
+  )
+
+ego_wide <- ego_wide |>
+  dplyr::left_join(comp_age_wide, by = "networkCanvasEgoUUID")
+
+comp_age_wide
+```
+
+## 7. Structural Measures
+
+Structural measures describe the topology of alter-alter tie networks and require the edgelist. We use `egor::as_igraph()` to convert the egor object into a named list of igraph objects (one per ego), then apply structural functions across the list with `purrr::map_dfr()`. This is the same split-apply-combine pattern used in the Vacca et al. textbook (Ch. 5):
+
+```         
+gr.list |> purrr::map_dfr(~ tibble(dens = edge_density(.x), ...), .id = "ego_ID")
+```
+
+adapted here for language-specific betweenness.
+
+### 7.1 Build igraph list from egor object
+
+```{r build_igraph_list}
+gr_list <- egor::as_igraph(egor_obj, include.ego = FALSE)
+```
+
+### 7.2 Network density and structural summary
+
+Using `purrr::map_dfr()` to compute multiple structural measures at once, following the textbook pattern:
+
+```{r structural_summary}
+structural_df <- gr_list |>
+  purrr::map_dfr(
+    ~ tibble::tibble(
+        density  = igraph::edge_density(.x, loops = FALSE),
+        mean_deg = mean(igraph::degree(.x))
+      ),
+    .id = "networkCanvasEgoUUID"
+  )
+
+structural_df
+```
+
+### 7.3 Ego language betweenness
+
+**Definition (Tiv et al., 2022).** Ego language betweenness quantifies how often the ego lies on the shortest communication paths connecting alters from *different* language communities. For each cross-language alter pair (i, j):
+
+-   alters **disconnected** in the alter-only graph → every path must route through the ego → contribution = 1
+-   alters **connected** through other alters → ego is not needed → contribution = 0
+
+Ego language betweenness = Σ contributions over all cross-language pairs (i, j).
+
+The language community of each alter is defined by `languageKnownCategory` (the alter's own repertoire). Pairs sharing the same category are excluded because no language bridge is needed.
+
+```{r ego_lang_betweenness}
+compute_ego_lang_betweenness <- function(g) {
+
+  lang <- igraph::V(g)$languageKnownCategory
+  nids <- igraph::V(g)$name
+
+  if (is.null(lang) || length(unique(stats::na.omit(lang))) < 2) return(0)
+
+  pairs <- utils::combn(seq_along(nids), 2, simplify = FALSE)
+
+  contributions <- vapply(pairs, function(p) {
+    i <- p[1]; j <- p[2]
+    li <- lang[i]; lj <- lang[j]
+    if (is.na(li) || is.na(lj) || li == lj) return(0)
+    sp <- igraph::distances(g, v = nids[i], to = nids[j], mode = "all")[1, 1]
+    if (!is.finite(sp)) return(1)   # disconnected: ego is the only bridge
+    return(0)                        # connected through alters: ego not needed
+  }, numeric(1))
+
+  sum(contributions)
+}
+
+betweenness_df <- gr_list |>
+  purrr::map_dfr(
+    ~ tibble::tibble(ego_lang_betweenness = compute_ego_lang_betweenness(.x)),
+    .id = "networkCanvasEgoUUID"
+  )
+
+betweenness_df
+```
+
+### 7.4 Join structural measures to ego_wide
+
+```{r join_structural}
+ego_wide <- ego_wide |>
+  dplyr::left_join(structural_df,   by = "networkCanvasEgoUUID") |>
+  dplyr::left_join(betweenness_df,  by = "networkCanvasEgoUUID")
+
+ego_wide |> dplyr::select(participant, density, ego_lang_betweenness)
+```
+
+## 8. Network Visualization
+
+### 8.1 Ego-centered network plot
+
+The ego is placed at the center; all 15 alters radiate outward in a circle. Node color = `languageUsedCategory` (what language the ego speaks *with* that alter, matching the `colorScheme` from the reference code). The ego node is white. All alter nodes are the same size; edges are uniformly styled. The legend shows only the language categories that actually appear in that ego's network.
+
+`purrr::walk2()` applies `plot_ego_network()` to every ego — the side-effect equivalent of `map_dfr()`, used here for plotting rather than data aggregation.
+
+#### Helper functions
+
+```{r helpers, results='hide'}
+# layout_ego_center()
+# Places the ego node at (0, 0) and arranges all alters evenly around a circle.
+layout_ego_center <- function(g, ego_name = "ego", radius = 1) {
+  vnames    <- igraph::V(g)$name
+  ego_idx   <- which(vnames == ego_name)
+  alter_idx <- setdiff(seq_along(vnames), ego_idx)
+  m         <- length(alter_idx)
+
+  ang <- seq(0, 2 * pi, length.out = m + 1)[-(m + 1)]
+
+  xy <- matrix(NA_real_, nrow = igraph::vcount(g), ncol = 2)
+  xy[ego_idx,   ] <- c(0, 0)
+  xy[alter_idx, 1] <- radius * cos(ang)
+  xy[alter_idx, 2] <- radius * sin(ang)
+  xy
+}
+
+# build_ego_igraph()
+# Returns an igraph for one ego (including the ego node) from tidy_alter and
+# edgelist_linked.
+#
+# Key constraint: graph_from_data_frame() uses the FIRST column of the
+# vertices dataframe as vertex names. 'name' must therefore come first —
+# if 'participant' (identical for all 15 rows of the same ego) ends up in
+# column 1, igraph raises "duplicate vertex names".
+#
+# The ego node is added as an extra row with name = "ego" so that
+# layout_ego_center() can place it at the origin.
+build_ego_igraph <- function(ego_uuid, alter_df, edge_df) {
+
+  alters <- alter_df |>
+    dplyr::filter(networkCanvasEgoUUID == ego_uuid) |>
+    dplyr::mutate(name = as.character(nodeID)) |>
+    dplyr::select(name, dplyr::everything())   # name MUST be column 1
+
+  ego_row <- alters[1, ]
+  ego_row[, ] <- NA
+  ego_row$name <- "ego"
+  alters <- dplyr::bind_rows(alters, ego_row)
+
+  edges <- edge_df |>
+    dplyr::filter(networkCanvasEgoUUID == ego_uuid) |>
+    dplyr::select(from, to) |>
+    dplyr::mutate(from = as.character(from), to = as.character(to)) |>
+    dplyr::filter(from %in% alters$name, to %in% alters$name)
+
+  g <- igraph::graph_from_data_frame(
+    d        = edges,
+    directed = FALSE,
+    vertices = alters
+  )
+
+  # Collapse to undirected (removes any directed edge artifacts)
+  igraph::as_undirected(g, mode = "collapse")
+}
+
+# plot_ego_network()
+# Draws one ego-centered network
+# Node color  = languageUsedCategory (ego-alter language use)
+# Ego node    = white, centered
+# Alter nodes = colored by lang_colours, uniform size
+# Legend      = horizontal bar at bottom, only present categories shown
+plot_ego_network <- function(ego_uuid,
+                              alter_df,
+                              edge_df,
+                              lang_colours,
+                              ego_name    = "ego",
+                              title       = NULL,
+                              show_labels = FALSE) {
+
+  g      <- build_ego_igraph(ego_uuid, alter_df, edge_df)
+  vnames <- igraph::V(g)$name
+  lang   <- igraph::V(g)$languageUsedCategory
+  is_ego <- (vnames == ego_name)
+
+  vcol              <- rep("gray80", igraph::vcount(g))
+  vcol[!is_ego]     <- unname(lang_colours[as.character(lang[!is_ego])])
+  vcol[is.na(vcol)] <- "gray80"
+  vcol[is_ego]      <- "white"
+
+  lay <- layout_ego_center(g, ego_name = ego_name, radius = 1)
+
+  plot(
+    g,
+    layout             = lay,
+    vertex.color       = vcol,
+    vertex.size        = 18,
+    vertex.frame.width = 3,
+    vertex.label       = if (show_labels) vnames else NA,
+    vertex.label.cex   = 0.8,
+    edge.color         = "gray60",
+    edge.width         = 2,
+    main               = if (!is.null(title)) title else "",
+    rescale            = TRUE,
+    margin             = 0
+  )
+
+  present_cats <- sort(unique(stats::na.omit(as.character(lang[!is_ego]))))
+  present_cats <- present_cats[present_cats %in% names(lang_colours)]
+
+  if (length(present_cats) > 0) {
+    legend(
+      "bottom",
+      inset   = c(0, -0.12),
+      xpd     = TRUE,
+      legend  = present_cats,
+      col     = unname(lang_colours[present_cats]),
+      pch     = 19,
+      pt.cex  = 1.2,
+      bty     = "n",
+      cex     = 0.75,
+      horiz   = TRUE
+    )
+  }
+
+  invisible(g)
+}
+```
+
+#### Single-ego demo
+
+```{r demo_sociogram, echo=FALSE, fig.width=7, fig.height=7, dpi=150}
+plot_ego_network(
+  ego_uuid     = data_ego$networkCanvasEgoUUID[1],
+  alter_df     = tidy_alter,
+  edge_df      = edgelist_linked,
+  lang_colours = lang_colours,
+  title        = data_ego$participant[1]
+)
+```
+
+#### Multi-ego panel
+
+```{r multi_ego_panel, echo=FALSE, fig.width=12, fig.height=ceiling(nrow(data_ego)/3)*4, dpi=150}
+n_ego  <- nrow(data_ego)
+n_cols <- min(3, n_ego)
+n_rows <- ceiling(n_ego / n_cols)
+
+par(mfrow = c(n_rows, n_cols), mar = c(0.5, 1.5, 1.5, 0.5))
+
+purrr::walk2(
+  data_ego$networkCanvasEgoUUID,
+  data_ego$participant,
+  ~ plot_ego_network(
+      ego_uuid     = .x,
+      alter_df     = tidy_alter,
+      edge_df      = edgelist_linked,
+      lang_colours = lang_colours,
+      title        = .y
+    )
+)
+```
+
+## 9. Export Network Plots
+
+Individual network plots can be saved as JPEG files, one per ego.
+
+```{r export_networks, eval=FALSE}
+out_dir <- "./pns_outputs/ego_networks"
+dir.create(out_dir, showWarnings = FALSE, recursive = TRUE)
+
+for (ego_id in data_ego$networkCanvasEgoUUID) {
+  participant_id <- data_ego$participant[data_ego$networkCanvasEgoUUID == ego_id]
+  out_file <- file.path(out_dir, paste0("ego_network_", participant_id, ".jpg"))
+
+  jpeg(filename = out_file, width = 15, height = 15, units = "in", res = 300)
+  plot_ego_network(
+    ego_uuid     = ego_id,
+    alter_df     = tidy_alter,
+    edge_df      = edgelist_linked,
+    lang_colours = lang_colours
+  )
+  dev.off()
+}
+
+cat("Saved", length(data_ego$networkCanvasEgoUUID), "network plots to:", out_dir, "\n")
+```
+
+## 10. Save Data Outputs
+
+```{r save_outputs}
+output_dir <- "./pns_outputs"
+dir.create(output_dir, showWarnings = FALSE)
+
+readr::write_csv(tidy_alter,
+  file.path(output_dir, "pns_tidy_alter.csv"))
+
+readr::write_csv(ego_wide,
+  file.path(output_dir, "pns_ego_wide.csv"))
+
+cat("Saved to:", output_dir, "\n")
+cat("  pns_tidy_alter.csv —", nrow(tidy_alter), "rows\n")
+cat("  pns_ego_wide.csv   —", nrow(ego_wide),
+    "rows,", ncol(ego_wide), "columns\n")
+```

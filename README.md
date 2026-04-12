@@ -28,12 +28,10 @@ Conceptually, this measure answers:
 > different language communities?*
 
 -   A value of **0** indicates that the ego does not bridge across
-    language communities (ego_01)
+    language communities 
 
 -   Higher values indicate that the ego is a central connector across
-    communities (ego_02)
-
-    <img src="images/clipboard-1615990562.png" width="269" /><img src="images/clipboard-1774520180.png" width="283" />
+    communities 
 
 This measure complements existing indices such as language entropy by
 focusing on **network structure rather than usage proportions**.

@@ -66,10 +66,10 @@ devtools::install_github("jil472-hue/egoLangBetweennessTEST")
 
 This package works on ego-network data. It assumes that the input data
 have been preprocessed, such that each alter is already assigned to a
-language category (e.g., `languageUsedCategory`). For example, users can
-refer to [preprocessing
-pipeline](pns_preprocessing/pns_preprocessing.html##2.1-language-categorization)
-for a workflow
+language category (e.g., `languageUsedCategory`). Users should
+refer to **[preprocessing
+pipeline](pns_preprocessing/pns_preprocessing.html##2.1-language-categorization)**
+for workflow
 
 The input typically consists of:
 

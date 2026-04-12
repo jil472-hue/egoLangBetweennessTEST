@@ -33,7 +33,7 @@ Conceptually, this measure answers:
 -   Higher values indicate that the ego is a central connector across
     communities 
 
-**[Try the interactive example](https://jil472-hue.github.io/egoLangBetweennessTEST/ego_betweenness_interactive_example.html)** — play with the network to see how the score is computed step by step.
+**[Try the interactive example](https://jil472-hue.github.io/egoLangBetweennessTEST/ego_betweenness_interactive example.html)** — play with the network to see how the score is computed step by step.
 
 This measure complements existing indices such as language entropy by
 focusing on **network structure rather than usage proportions**.

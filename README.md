@@ -69,7 +69,7 @@ have been preprocessed, such that each alter is already assigned to a
 language category (e.g., `languageUsedCategory`). Users should
 refer to **[preprocessing
 pipeline](pns_preprocessing/pns_preprocessing.html##2.1-language-categorization)**
-for workflow
+for workflow (You may need to download it for the full view)
 
 The input typically consists of:
 

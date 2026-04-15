@@ -1,5 +1,8 @@
 # REAME
 
+To compute the Language betweenness, the data should be preporcessed so refer to the **[preprocessing
+pipeline](pns_preprocessing/pns_preprocessing.html##2.1-language-categorization)**
+for workflow (You may need to download it for the full view of html)
 
 # egoLangBetweenness
 

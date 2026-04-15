@@ -1,7 +1,7 @@
 # REAME
 
 To compute the Language betweenness, the data should be preporcessed so refer to the **[preprocessing
-pipeline](pns_preprocessing/pns_preprocessing.html##2.1-language-categorization)**
+pipeline](pns_preprocessing/pns_preprocessing.md)**
 for workflow (You may need to download it for the full view of html)
 
 # egoLangBetweenness
@@ -71,7 +71,7 @@ This package works on ego-network data. It assumes that the input data
 have been preprocessed, such that each alter is already assigned to a
 language category (e.g., `languageUsedCategory`). Users should
 refer to **[preprocessing
-pipeline](pns_preprocessing/pns_preprocessing.html##2.1-language-categorization)**
+pipeline](pns_preprocessing/pns_preprocessing.md)**
 for workflow (You may need to download it for the full view of html)
 
 The input typically consists of:

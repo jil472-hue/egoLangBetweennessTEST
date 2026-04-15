@@ -152,7 +152,7 @@ experimental data.</td>
 
 ### Example data
 
-Below is an example using **[demo data](demo_data)** included in the package. Suppose we
+Below is an example using **[demo data](demo_data)**. Suppose we
 have ten ego networks, where alters are categorized as `"English"`,
 `"Spanish"`, or `"Bilingual"`.
 
